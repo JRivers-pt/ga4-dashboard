@@ -224,6 +224,23 @@ body {
     color: var(--text-primary);
 }
 
+/* Language Toggle */
+.lang-toggle {
+    padding: 8px 12px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-sm);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.lang-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent-indigo);
+}
+
 /* ========================================
    Main Content
    ======================================== */

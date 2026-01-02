@@ -177,6 +177,23 @@ function setupEventListeners() {
             document.getElementById('report-frequency').value = savedFrequency;
         }
     }
+
+    // Language toggle
+    const langToggle = document.getElementById('lang-toggle');
+    if (langToggle) {
+        // Set initial state
+        langToggle.textContent = currentLang === 'pt' ? '🇬🇧 EN' : '🇵🇹 PT';
+
+        langToggle.addEventListener('click', () => {
+            const newLang = currentLang === 'pt' ? 'en' : 'pt';
+            switchLanguage(newLang);
+        });
+    }
+
+    // Apply translations on load
+    if (typeof updateUILanguage === 'function') {
+        setTimeout(updateUILanguage, 100);
+    }
 }
 
 // ========================================
