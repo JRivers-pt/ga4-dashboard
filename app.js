@@ -118,6 +118,65 @@ function setupEventListeners() {
             refreshData();
         });
     });
+
+    // Refresh button
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshData();
+            showToast('Data refreshed!', 'success');
+        });
+    }
+
+    // Email settings modal
+    const emailBtn = document.getElementById('email-settings-btn');
+    const emailModal = document.getElementById('email-modal');
+    const modalClose = document.getElementById('modal-close');
+    const saveEmailBtn = document.getElementById('save-email-btn');
+    const testEmailBtn = document.getElementById('test-email-btn');
+
+    if (emailBtn && emailModal) {
+        emailBtn.addEventListener('click', () => {
+            emailModal.classList.remove('hidden');
+        });
+
+        modalClose.addEventListener('click', () => {
+            emailModal.classList.add('hidden');
+        });
+
+        emailModal.addEventListener('click', (e) => {
+            if (e.target === emailModal) {
+                emailModal.classList.add('hidden');
+            }
+        });
+
+        saveEmailBtn.addEventListener('click', () => {
+            const email = document.getElementById('report-email').value;
+            const frequency = document.getElementById('report-frequency').value;
+            if (email) {
+                localStorage.setItem('reportEmail', email);
+                localStorage.setItem('reportFrequency', frequency);
+                showToast('Email settings saved!', 'success');
+                emailModal.classList.add('hidden');
+            } else {
+                showToast('Please enter an email address.', 'error');
+            }
+        });
+
+        testEmailBtn.addEventListener('click', () => {
+            showToast('Email functionality requires EmailJS setup. Check the documentation.', 'info');
+        });
+
+        // Load saved email settings
+        const savedEmail = localStorage.getItem('reportEmail');
+        const savedFrequency = localStorage.getItem('reportFrequency');
+        if (savedEmail) {
+            document.getElementById('report-email').value = savedEmail;
+        }
+        if (savedFrequency) {
+            document.getElementById('report-frequency').value = savedFrequency;
+        }
+    }
 }
 
 // ========================================
@@ -217,6 +276,7 @@ function loadDemoData() {
     updateBrowsersChart(DEMO_DATA.browsers);
     updateCountriesList(DEMO_DATA.countries);
     updateUserTypesChart(DEMO_DATA.userTypes);
+    calculatePerformanceScore(DEMO_DATA.overview);
 }
 
 async function loadRealData() {
@@ -236,8 +296,10 @@ async function loadRealData() {
     // Handle overview metrics
     if (results[0].status === 'fulfilled') {
         updateOverviewMetrics(results[0].value);
+        calculatePerformanceScore(results[0].value);
     } else {
         updateOverviewMetrics(getEmptyOverview());
+        calculatePerformanceScore(getEmptyOverview());
     }
 
     // Handle users over time chart
@@ -943,3 +1005,247 @@ function showToast(message, type = 'info') {
         setTimeout(() => toast.remove(), 300);
     }, 5000);
 }
+
+// ========================================
+// Performance Score Functions
+// ========================================
+let currentMetrics = null;
+
+function calculatePerformanceScore(metrics) {
+    currentMetrics = metrics;
+
+    let score = 0;
+    const factors = [];
+
+    // Factor 1: User Growth (25 points)
+    const usersChange = metrics.usersChange || '0%';
+    const usersGrowth = parseFloat(usersChange.replace(/[+%]/g, ''));
+    if (usersGrowth > 10) {
+        score += 25;
+        factors.push({ label: 'User Growth ↑', class: 'good' });
+    } else if (usersGrowth > 0) {
+        score += 15;
+        factors.push({ label: 'User Growth +', class: 'good' });
+    } else if (usersGrowth > -10) {
+        score += 10;
+        factors.push({ label: 'Users Stable', class: 'warning' });
+    } else {
+        score += 0;
+        factors.push({ label: 'Users Declining', class: 'bad' });
+    }
+
+    // Factor 2: Bounce Rate (25 points) - lower is better
+    const bounceStr = metrics.bounceRate || '50%';
+    const bounceRate = parseFloat(bounceStr.replace('%', ''));
+    if (bounceRate < 40) {
+        score += 25;
+        factors.push({ label: 'Low Bounce Rate', class: 'good' });
+    } else if (bounceRate < 55) {
+        score += 18;
+        factors.push({ label: 'OK Bounce Rate', class: 'good' });
+    } else if (bounceRate < 70) {
+        score += 10;
+        factors.push({ label: 'High Bounce Rate', class: 'warning' });
+    } else {
+        score += 0;
+        factors.push({ label: 'Very High Bounce', class: 'bad' });
+    }
+
+    // Factor 3: Engagement Rate (25 points)
+    const engagementStr = metrics.engagementRate || '50%';
+    const engagementRate = parseFloat(engagementStr.replace('%', ''));
+    if (engagementRate > 60) {
+        score += 25;
+        factors.push({ label: 'High Engagement', class: 'good' });
+    } else if (engagementRate > 40) {
+        score += 18;
+        factors.push({ label: 'OK Engagement', class: 'good' });
+    } else if (engagementRate > 20) {
+        score += 10;
+        factors.push({ label: 'Low Engagement', class: 'warning' });
+    } else {
+        score += 0;
+        factors.push({ label: 'Poor Engagement', class: 'bad' });
+    }
+
+    // Factor 4: Session Duration (25 points)
+    const durationStr = metrics.avgDuration || '0m 0s';
+    const durationMatch = durationStr.match(/(\d+)m\s*(\d*)s?/);
+    const minutes = durationMatch ? parseInt(durationMatch[1]) : 0;
+    const seconds = durationMatch && durationMatch[2] ? parseInt(durationMatch[2]) : 0;
+    const totalSeconds = minutes * 60 + seconds;
+
+    if (totalSeconds > 180) { // > 3 min
+        score += 25;
+        factors.push({ label: 'Long Sessions', class: 'good' });
+    } else if (totalSeconds > 90) { // > 1.5 min
+        score += 18;
+        factors.push({ label: 'OK Sessions', class: 'good' });
+    } else if (totalSeconds > 30) {
+        score += 10;
+        factors.push({ label: 'Short Sessions', class: 'warning' });
+    } else {
+        score += 0;
+        factors.push({ label: 'Very Short Sessions', class: 'bad' });
+    }
+
+    updatePerformanceUI(score, factors);
+    generateInsights(metrics, score, factors);
+
+    return score;
+}
+
+function updatePerformanceUI(score, factors) {
+    // Update score number
+    const scoreEl = document.getElementById('performance-score');
+    if (scoreEl) {
+        scoreEl.textContent = score;
+    }
+
+    // Update score ring progress
+    const ring = document.getElementById('score-ring');
+    if (ring) {
+        // Add gradient definition to SVG
+        const svg = ring.closest('svg');
+        if (svg && !svg.querySelector('#score-gradient')) {
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            defs.innerHTML = `
+                <linearGradient id="score-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:#6366f1"/>
+                    <stop offset="100%" style="stop-color:#8b5cf6"/>
+                </linearGradient>
+            `;
+            svg.prepend(defs);
+        }
+
+        // Calculate stroke-dashoffset based on score (0-100)
+        const circumference = 2 * Math.PI * 54; // r=54
+        const offset = circumference - (score / 100) * circumference;
+        ring.style.strokeDashoffset = offset;
+    }
+
+    // Update score message
+    const messageEl = document.getElementById('score-message');
+    if (messageEl) {
+        if (score >= 80) {
+            messageEl.textContent = 'Excellent! Your site is performing great.';
+        } else if (score >= 60) {
+            messageEl.textContent = 'Good performance with room for improvement.';
+        } else if (score >= 40) {
+            messageEl.textContent = 'Average performance. Consider the recommendations below.';
+        } else {
+            messageEl.textContent = 'Needs improvement. Check the insights for suggestions.';
+        }
+    }
+
+    // Update score factors
+    const factorsEl = document.getElementById('score-factors');
+    if (factorsEl) {
+        factorsEl.innerHTML = factors.map(f =>
+            `<span class="score-factor ${f.class}">${f.label}</span>`
+        ).join('');
+    }
+}
+
+function generateInsights(metrics, score, factors) {
+    const insights = [];
+
+    // Parse metrics
+    const usersChange = parseFloat((metrics.usersChange || '0%').replace(/[+%]/g, ''));
+    const bounceRate = parseFloat((metrics.bounceRate || '50%').replace('%', ''));
+    const engagementRate = parseFloat((metrics.engagementRate || '50%').replace('%', ''));
+    const sessions = parseInt((metrics.sessions || '0').replace(/,/g, ''));
+    const pageviews = parseInt((metrics.pageviews || '0').replace(/,/g, ''));
+
+    // Insight 1: Traffic trend
+    if (usersChange > 10) {
+        insights.push({
+            icon: '📈',
+            title: 'Traffic is Growing!',
+            text: `Your traffic increased by ${usersChange.toFixed(1)}%. Keep doing what you're doing and consider boosting successful campaigns.`,
+            type: 'success'
+        });
+    } else if (usersChange < -10) {
+        insights.push({
+            icon: '📉',
+            title: 'Traffic is Declining',
+            text: 'Consider investing in SEO, Google Ads, or social media marketing to attract more visitors.',
+            type: 'danger'
+        });
+    }
+
+    // Insight 2: Bounce rate
+    if (bounceRate > 60) {
+        insights.push({
+            icon: '🚪',
+            title: 'High Bounce Rate',
+            text: `${bounceRate.toFixed(1)}% of visitors leave without interacting. Improve your landing page content, speed, and calls-to-action.`,
+            type: 'warning'
+        });
+    } else if (bounceRate < 40) {
+        insights.push({
+            icon: '✨',
+            title: 'Great User Retention',
+            text: 'Visitors are engaging well with your content. Consider adding more conversion opportunities.',
+            type: 'success'
+        });
+    }
+
+    // Insight 3: Engagement
+    if (engagementRate < 40) {
+        insights.push({
+            icon: '💡',
+            title: 'Low Engagement',
+            text: 'Add interactive elements, videos, or compelling CTAs to increase user engagement on your pages.',
+            type: 'warning'
+        });
+    }
+
+    // Insight 4: Pages per session
+    if (sessions > 0 && pageviews / sessions < 2) {
+        insights.push({
+            icon: '📄',
+            title: 'Low Pages per Session',
+            text: 'Users view fewer than 2 pages. Improve internal linking and add related content suggestions.',
+            type: 'info'
+        });
+    }
+
+    // Insight 5: Lead generation tip
+    if (sessions > 0) {
+        insights.push({
+            icon: '🎯',
+            title: 'Lead Generation Tip',
+            text: 'Add a newsletter signup, contact form, or free resource download to convert visitors into leads.',
+            type: 'info'
+        });
+    }
+
+    // Default insight if connected but no specific recommendations
+    if (insights.length === 0) {
+        insights.push({
+            icon: '✅',
+            title: 'Looking Good!',
+            text: 'Your site metrics are healthy. Focus on maintaining current performance and testing new optimizations.',
+            type: 'success'
+        });
+    }
+
+    updateInsightsUI(insights);
+}
+
+function updateInsightsUI(insights) {
+    const grid = document.getElementById('insights-grid');
+    if (!grid) return;
+
+    grid.innerHTML = insights.map(insight => `
+        <div class="insight-card ${insight.type}">
+            <div class="insight-icon">${insight.icon}</div>
+            <div class="insight-content">
+                <h4>${insight.title}</h4>
+                <p>${insight.text}</p>
+            </div>
+        </div>
+    `).join('');
+}
+
