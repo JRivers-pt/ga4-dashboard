@@ -222,32 +222,91 @@ function loadDemoData() {
 async function loadRealData() {
     const dateRange = DATE_RANGES[currentDateRange];
 
-    try {
-        // Fetch all data in parallel
-        const [overview, usersTime, traffic, pages, devices, browsers, countries] = await Promise.all([
-            fetchOverviewMetrics(dateRange),
-            fetchUsersOverTime(dateRange),
-            fetchTrafficSources(dateRange),
-            fetchTopPages(dateRange),
-            fetchDevices(dateRange),
-            fetchBrowsers(dateRange),
-            fetchCountries(dateRange)
-        ]);
+    // Fetch each data source individually to handle partial failures
+    const results = await Promise.allSettled([
+        fetchOverviewMetrics(dateRange),
+        fetchUsersOverTime(dateRange),
+        fetchTrafficSources(dateRange),
+        fetchTopPages(dateRange),
+        fetchDevices(dateRange),
+        fetchBrowsers(dateRange),
+        fetchCountries(dateRange)
+    ]);
 
-        // Update all components
-        updateOverviewMetrics(overview);
-        updateUsersChart(usersTime);
-        updateTrafficChart(traffic);
-        updateTopPagesTable(pages);
-        updateDevicesGrid(devices);
-        updateBrowsersChart(browsers);
-        updateCountriesList(countries);
-
-    } catch (error) {
-        console.error('Error loading data:', error);
-        showToast('Error loading analytics data. Using demo data.', 'error');
-        loadDemoData();
+    // Handle overview metrics
+    if (results[0].status === 'fulfilled') {
+        updateOverviewMetrics(results[0].value);
+    } else {
+        updateOverviewMetrics(getEmptyOverview());
     }
+
+    // Handle users over time chart
+    if (results[1].status === 'fulfilled' && results[1].value.labels.length > 0) {
+        updateUsersChart(results[1].value);
+    } else {
+        updateUsersChart({ labels: ['No data'], users: [0], newUsers: [0] });
+    }
+
+    // Handle traffic sources
+    if (results[2].status === 'fulfilled' && results[2].value.length > 0) {
+        updateTrafficChart(results[2].value);
+    } else {
+        updateTrafficChart([{ source: 'No data', users: 1, color: '#71717a' }]);
+    }
+
+    // Handle top pages
+    if (results[3].status === 'fulfilled' && results[3].value.length > 0) {
+        updateTopPagesTable(results[3].value);
+    } else {
+        updateTopPagesTable([{ title: 'No data for this period', path: '-', views: '-', users: '-', avgTime: '-' }]);
+    }
+
+    // Handle devices
+    if (results[4].status === 'fulfilled' && results[4].value.length > 0) {
+        updateDevicesGrid(results[4].value);
+    } else {
+        updateDevicesGrid([{ name: 'No data', users: 0, percent: 0, icon: '📊' }]);
+    }
+
+    // Handle browsers
+    if (results[5].status === 'fulfilled' && results[5].value.length > 0) {
+        updateBrowsersChart(results[5].value);
+    } else {
+        updateBrowsersChart([{ name: 'No data', users: 0 }]);
+    }
+
+    // Handle countries
+    if (results[6].status === 'fulfilled' && results[6].value.length > 0) {
+        updateCountriesList(results[6].value);
+    } else {
+        updateCountriesList([{ name: 'No data for this period', code: 'XX', flag: '🌍', users: 0 }]);
+    }
+
+    // Check if any failed and notify
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0 && failures.length < results.length) {
+        showToast('Some data could not be loaded for this date range.', 'info');
+    } else if (failures.length === results.length) {
+        showToast('No data available for this date range.', 'info');
+    }
+}
+
+// Helper function for empty overview
+function getEmptyOverview() {
+    return {
+        totalUsers: '0',
+        usersChange: '0%',
+        sessions: '0',
+        sessionsChange: '0%',
+        pageviews: '0',
+        pageviewsChange: '0%',
+        bounceRate: '0%',
+        bounceChange: '0%',
+        avgDuration: '0m 0s',
+        durationChange: '0%',
+        engagementRate: '0%',
+        engagementChange: '0%'
+    };
 }
 
 // ========================================
